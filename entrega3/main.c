@@ -1,4 +1,3 @@
-//Main utilizado en el esp32 para entrega 3 del proyecto UVGrow
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -718,13 +717,17 @@ static void actualizar_mq2(void)
     );
 }
 #endif
+
 static void publish_json(void)
 {
     if (!mqtt_ready || mqtt == NULL) return;
+
     cJSON *root = cJSON_CreateObject();
     if (!root) return;
+
     cJSON_AddStringToObject(root, "device_id", "uvgrow_nodo01");
     cJSON_AddNumberToObject(root, "uptime_ms", (double)now_ms());
+
 #if UV_ENABLE_DHT11
     if (dht11_valido) {
         cJSON_AddNumberToObject(root, "temperatura_ambiente_c", temperatura_ambiente);
@@ -734,6 +737,7 @@ static void publish_json(void)
         cJSON_AddNullToObject(root, "humedad_ambiente_pct");
     }
 #endif
+
 #if UV_ENABLE_LM35
     if (lm35_valido) {
         cJSON_AddNumberToObject(root, "temperatura_suelo_c", temperatura_lm35);
@@ -745,64 +749,134 @@ static void publish_json(void)
         cJSON_AddNullToObject(root, "lm35_adc");
     }
 #endif
+
 #if UV_ENABLE_SOIL
-    if (soil_valido) { cJSON_AddNumberToObject(root, "soil_adc", raw_soil); cJSON_AddNumberToObject(root, "soil_pct", soil_pct); }
-    else { cJSON_AddNullToObject(root, "soil_adc"); cJSON_AddNullToObject(root, "soil_pct"); }
+    if (soil_valido) {
+        cJSON_AddNumberToObject(root, "soil_adc", raw_soil);
+        cJSON_AddNumberToObject(root, "soil_pct", soil_pct);
+    } else {
+        cJSON_AddNullToObject(root, "soil_adc");
+        cJSON_AddNullToObject(root, "soil_pct");
+    }
 #endif
+
 #if UV_ENABLE_WATER
-    if (water_valido) { cJSON_AddNumberToObject(root, "water_adc", raw_water); cJSON_AddNumberToObject(root, "water_pct", water_pct); }
-    else { cJSON_AddNullToObject(root, "water_adc"); cJSON_AddNullToObject(root, "water_pct"); }
+    if (water_valido) {
+        cJSON_AddNumberToObject(root, "water_adc", raw_water);
+        cJSON_AddNumberToObject(root, "water_pct", water_pct);
+    } else {
+        cJSON_AddNullToObject(root, "water_adc");
+        cJSON_AddNullToObject(root, "water_pct");
+    }
+
     cJSON_AddBoolToObject(root, "water_calibrated", true);
     cJSON_AddBoolToObject(root, "water_pump_lock", water_lock);
 #endif
+
 #if UV_ENABLE_LDR
-    if (ldr_valido) { cJSON_AddNumberToObject(root, "ldr_adc", raw_ldr); cJSON_AddNumberToObject(root, "light_pct", light_pct); }
-    else { cJSON_AddNullToObject(root, "ldr_adc"); cJSON_AddNullToObject(root, "light_pct"); }
+    if (ldr_valido) {
+        cJSON_AddNumberToObject(root, "ldr_adc", raw_ldr);
+        cJSON_AddNumberToObject(root, "light_pct", light_pct);
+    } else {
+        cJSON_AddNullToObject(root, "ldr_adc");
+        cJSON_AddNullToObject(root, "light_pct");
+    }
 #endif
+
 #if UV_ENABLE_PIR
-    if (pir_ready) cJSON_AddBoolToObject(root, "motion", motion);
-    else cJSON_AddNullToObject(root, "motion");
+    if (pir_ready) {
+        cJSON_AddBoolToObject(root, "motion", motion);
+        cJSON_AddNumberToObject(root, "movimiento_estado", motion ? 1 : 0);
+    } else {
+        cJSON_AddNullToObject(root, "motion");
+        cJSON_AddNumberToObject(root, "movimiento_estado", -1);
+    }
+#else
+    cJSON_AddNullToObject(root, "motion");
+    cJSON_AddNumberToObject(root, "movimiento_estado", -1);
 #endif
+
 #if UV_ENABLE_REED
-    if (reed_inicializado) cJSON_AddBoolToObject(root, "tapa_deposito_cerrada", tapa_cerrada);
-    else cJSON_AddNullToObject(root, "tapa_deposito_cerrada");
+    if (reed_inicializado) {
+        cJSON_AddBoolToObject(root, "tapa_deposito_cerrada", tapa_cerrada);
+        cJSON_AddNumberToObject(root, "tapa_estado", tapa_cerrada ? 1 : 0);
+    } else {
+        cJSON_AddNullToObject(root, "tapa_deposito_cerrada");
+        cJSON_AddNumberToObject(root, "tapa_estado", -1);
+    }
+#else
+    cJSON_AddNullToObject(root, "tapa_deposito_cerrada");
+    cJSON_AddNumberToObject(root, "tapa_estado", -1);
 #endif
+
     cJSON_AddBoolToObject(root, "pump_on", pump_on);
     cJSON_AddBoolToObject(root, "fan_on", fan_on);
+
+    cJSON_AddNumberToObject(root, "bomba_estado", pump_on ? 1 : 0);
+    cJSON_AddNumberToObject(root, "ventilador_estado", fan_on ? 1 : 0);
+
     cJSON_AddStringToObject(root, "status", "perfil_y_alertas");
-    cJSON_AddStringToObject(root, "profile_id", profile_index >= 0 ? profiles[profile_index].id : "sin_perfil");
+
+    cJSON_AddStringToObject(
+        root,
+        "profile_id",
+        profile_index >= 0 ? profiles[profile_index].id : "sin_perfil"
+    );
+	int perfil_estado = 0;
+
+	if (profile_index >= 0) {
+	    if (strcmp(profiles[profile_index].id, "espada_africana") == 0) {
+	        perfil_estado = 1;
+	    } else if (strcmp(profiles[profile_index].id, "siempreverde_china") == 0) {
+	        perfil_estado = 2;
+	    }
+	}
+
+	cJSON_AddNumberToObject(root, "perfil_estado", perfil_estado);
     cJSON *active = cJSON_AddArrayToObject(root, "active_alerts");
-    if (active) for (int i = 0; i < ALERT_COUNT; ++i)
-        if (alerts[i].active) cJSON_AddItemToArray(active, cJSON_CreateString(alerts[i].name));
-	#if UV_ENABLE_MQ2
-	    if (mq2_valido)
-	    {
-	        cJSON_AddNumberToObject(
-	            root,
-	            "mq2_adc",
-	            raw_mq2
-	        );
-	    }
-	    else
-	    {
-	        cJSON_AddNullToObject(
-	            root,
-	            "mq2_adc"
-	        );
-	    }
-	    cJSON_AddBoolToObject(
-	        root,
-	        "mq2_calibrated",
-	        false
-	    );
-	#endif
-	    char *json = cJSON_PrintUnformatted(root);
+
+    if (active) {
+        for (int i = 0; i < ALERT_COUNT; ++i) {
+            if (alerts[i].active) {
+                cJSON_AddItemToArray(
+                    active,
+                    cJSON_CreateString(alerts[i].name)
+                );
+            }
+        }
+    }
+
+#if UV_ENABLE_MQ2
+    if (mq2_valido) {
+        cJSON_AddNumberToObject(root, "mq2_adc", raw_mq2);
+    } else {
+        cJSON_AddNullToObject(root, "mq2_adc");
+    }
+
+    cJSON_AddBoolToObject(root, "mq2_calibrated", false);
+#endif
+
+    char *json = cJSON_PrintUnformatted(root);
+
     if (json) {
-        int id = esp_mqtt_client_publish(mqtt, UV_TOPIC_TELEMETRY, json, 0, 1, 0);
-        if (id >= 0) ESP_LOGI(TAG, "MQTT publicado: %s", json);
-        else ESP_LOGW(TAG, "Error publicando MQTT");
+        int id = esp_mqtt_client_publish(
+            mqtt,
+            UV_TOPIC_TELEMETRY,
+            json,
+            0,
+            1,
+            0
+        );
+
+        if (id >= 0) {
+            ESP_LOGI(TAG, "MQTT publicado: %s", json);
+        } else {
+            ESP_LOGW(TAG, "Error publicando MQTT");
+        }
+
         free(json);
     }
+
     cJSON_Delete(root);
 }
 static void on_mqtt(void *args, esp_event_base_t base, int32_t id, void *data)
