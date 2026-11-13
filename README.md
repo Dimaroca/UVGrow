@@ -1,0 +1,1 @@
+En la carpeta de entrega 3 esta el codigo de funcionamiento normal del nodo Iot, mientras que en la carpeta de entrega 4 se encuentra el codigo utilizado para la presentacion y demostracion del funcionamiento del nodo.
